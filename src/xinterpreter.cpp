@@ -46,7 +46,8 @@ namespace xcpp
           xmagics(),
           p_cout_strbuf(nullptr), p_cerr_strbuf(nullptr),
           m_cout_buffer(std::bind(&interpreter::publish_stdout, this, _1)),
-          m_cerr_buffer(std::bind(&interpreter::publish_stderr, this, _1))
+          m_cerr_buffer(std::bind(&interpreter::publish_stderr, this, _1)),
+          ex(0)
     {
         redirect_output();
         init_preamble();
@@ -58,8 +59,8 @@ namespace xcpp
     xeus::xjson interpreter::execute_request_impl(int execution_counter,
                                                   const std::string& code,
                                                   bool silent,
-                                                  bool /*store_history*/,
-                                                  xeus::xjson /*user_expressions*/,
+                                                  bool store_history,
+                                                  xeus::xjson user_expressions,
                                                   bool allow_stdin)
     {
         xeus::xjson kernel_res;
@@ -86,19 +87,21 @@ namespace xcpp
 
         // If silent is set to true, temporarily dismiss all std::cerr and
         // std::cout outpus resulting from `m_processor.process`.
-
         auto cout_strbuf = std::cout.rdbuf();
         auto cerr_strbuf = std::cerr.rdbuf();
 
         if (silent)
         {
             auto null = xnull();
-            std::cout.rdbuf(&null);
-            std::cerr.rdbuf(&null);
+            //std::cout.rdbuf(&null);
+            //std::cerr.rdbuf(&null);
+
+        std::cout.setstate(std::ios_base::failbit);
+        std::cerr.setstate(std::ios_base::failbit);
         }
-        
+
         // Scope guard performing the temporary redirection of input requests.
-        auto input_guard = input_redirection(allow_stdin); 
+        auto input_guard = input_redirection(allow_stdin);
 
         for (const auto& block : blocks)
         {
@@ -132,6 +135,31 @@ namespace xcpp
 
             if (compilation_result != cling::Interpreter::kSuccess)
             {
+                if (ex > 0)
+                {
+                  ex--;
+                  std::string code_undo = code;
+                  if (code.find(".undo") == std::string::npos)
+                  {
+                    std::cout << "Trying to recover.\n";
+                    code_undo = ".undo\n" + code;
+                  }
+
+                  xeus::xjson kernel_res_undo = execute_request_impl(
+                      execution_counter, code_undo, true, store_history,
+                      user_expressions, allow_stdin);
+                  m_processor.cancelContinuation();
+
+                  std::cout.clear();
+                  std::cerr.clear();
+
+                  std::cout << std::flush;
+                  std::cerr << std::flush;
+                  return kernel_res_undo;
+                }
+
+                indent = m_processor.process(block, compilation_result,
+                    &output, true);
                 errorlevel = 1;
                 ename = "Interpreter Error";
             }
@@ -191,6 +219,8 @@ namespace xcpp
             kernel_res["payload"] = xeus::xjson::array();
             kernel_res["user_expressions"] = xeus::xjson::object();
         }
+
+        ex++;
         return kernel_res;
     }
 

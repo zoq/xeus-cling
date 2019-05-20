@@ -84,6 +84,7 @@ namespace xcpp
 
         xoutput_buffer m_cout_buffer;
         xoutput_buffer m_cerr_buffer;
+        int ex;
     };
 }
 
