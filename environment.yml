@@ -1,8 +1,9 @@
-name: xeus-cling
+name: xeus-cling-nighlty
 channels:
+  - zoq
   - conda-forge
 dependencies:
-  - xeus-cling=0.9.0
+  - xeus-cling
   - xtensor=0.21.2
   - xtensor-blas=0.17.1
   - notebook
